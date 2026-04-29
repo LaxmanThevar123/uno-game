@@ -87,6 +87,26 @@
         .messages { max-width: 600px; margin: 10px auto; padding: 10px; background: #16213e; border-radius: 10px; max-height: 100px; overflow-y: auto; font-size: 0.85rem; }
         .messages p { padding: 2px 0; border-bottom: 1px solid #0f3460; }
 
+        /* CHAT */
+        .chat-toggle { position: fixed; bottom: 20px; right: 20px; width: 50px; height: 50px; border-radius: 50%; background: #533483; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 50; transition: transform 0.2s; }
+        .chat-toggle:hover { transform: scale(1.1); }
+        .chat-toggle .badge { position: absolute; top: -2px; right: -2px; width: 18px; height: 18px; background: #e94560; border-radius: 50%; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; display: none; }
+        .chat-toggle .badge.show { display: flex; }
+        .chat-box { position: fixed; bottom: 80px; right: 20px; width: 300px; max-height: 400px; background: #16213e; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); z-index: 50; display: none; flex-direction: column; overflow: hidden; }
+        .chat-box.active { display: flex; }
+        .chat-header { padding: 12px 15px; background: #533483; font-weight: bold; font-size: 0.95rem; }
+        .chat-messages { flex: 1; padding: 10px; overflow-y: auto; max-height: 280px; min-height: 150px; }
+        .chat-msg { margin-bottom: 8px; font-size: 0.85rem; }
+        .chat-msg .chat-name { font-weight: bold; color: #4caf50; }
+        .chat-msg .chat-name.me { color: #e94560; }
+        .chat-msg .chat-text { color: #ddd; margin-top: 2px; }
+        .chat-input-area { display: flex; border-top: 1px solid #0f3460; }
+        .chat-input-area input { flex: 1; padding: 10px 12px; border: none; background: #0f3460; color: #fff; font-size: 0.9rem; outline: none; }
+        .chat-input-area button { padding: 10px 15px; border: none; background: #e94560; color: #fff; cursor: pointer; font-weight: bold; }
+        @media (max-width: 600px) {
+            .chat-box { width: calc(100% - 30px); right: 15px; bottom: 75px; }
+        }
+
         /* DIRECTION & TURN */
         .game-info { display: flex; justify-content: center; gap: 20px; align-items: center; margin: 10px 0; font-size: 0.9rem; color: #aaa; }
         .turn-indicator { color: #4caf50; font-weight: bold; font-size: 1rem; }
@@ -174,6 +194,17 @@
         <div class="color-btn blue" onclick="pickColor('Blue')"></div>
         <div class="color-btn green" onclick="pickColor('Green')"></div>
         <div class="color-btn yellow" onclick="pickColor('Yellow')"></div>
+    </div>
+</div>
+
+<!-- CHAT -->
+<button class="chat-toggle" id="chatToggle" onclick="toggleChat()" style="display:none;">💬<span class="badge" id="chatBadge">0</span></button>
+<div class="chat-box" id="chatBox">
+    <div class="chat-header">💬 Room Chat</div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-area">
+        <input type="text" id="chatInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendChat()">
+        <button onclick="sendChat()">Send</button>
     </div>
 </div>
 
@@ -320,6 +351,41 @@ function drawCard() {
     socket.emit('draw_card', { code: roomCode });
 }
 
+// --- CHAT ---
+let chatOpen = false;
+let unreadCount = 0;
+
+function toggleChat() {
+    chatOpen = !chatOpen;
+    document.getElementById('chatBox').classList.toggle('active', chatOpen);
+    if (chatOpen) {
+        unreadCount = 0;
+        document.getElementById('chatBadge').classList.remove('show');
+        document.getElementById('chatInput').focus();
+    }
+}
+
+function sendChat() {
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (!msg || !roomCode) return;
+    socket.emit('chat_message', { code: roomCode, message: msg });
+    input.value = '';
+}
+
+function addChatMessage(name, message) {
+    const div = document.getElementById('chatMessages');
+    const isMe = name === myName;
+    div.innerHTML += `<div class="chat-msg"><span class="chat-name ${isMe ? 'me' : ''}">${name}:</span><div class="chat-text">${message}</div></div>`;
+    div.scrollTop = div.scrollHeight;
+    if (!chatOpen) {
+        unreadCount++;
+        const badge = document.getElementById('chatBadge');
+        badge.textContent = unreadCount;
+        badge.classList.add('show');
+    }
+}
+
 // --- SOCKET EVENTS ---
 socket.on('room_created', (data) => {
     roomCode = data.code;
@@ -327,6 +393,7 @@ socket.on('room_created', (data) => {
     document.getElementById('roomCode').textContent = data.code;
     document.getElementById('hostControls').style.display = 'block';
     document.getElementById('waitingMsg').style.display = 'none';
+    document.getElementById('chatToggle').style.display = 'block';
     renderLobby(data.players);
     showScreen('lobbyScreen');
 });
@@ -334,6 +401,7 @@ socket.on('room_created', (data) => {
 socket.on('room_update', (data) => {
     roomCode = data.code;
     renderLobby(data.players);
+    document.getElementById('chatToggle').style.display = 'block';
     if (!isHost) showScreen('lobbyScreen');
 });
 
@@ -348,6 +416,10 @@ socket.on('game_state', (state) => {
 
 socket.on('error', (data) => {
     showToast(data.msg);
+});
+
+socket.on('chat_message', (data) => {
+    addChatMessage(data.name, data.message);
 });
 </script>
 </body>

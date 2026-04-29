@@ -315,6 +315,18 @@ def handle_draw(data):
     broadcast_state(code, messages, winner)
 
 
+@socketio.on("chat_message")
+def handle_chat(data):
+    code = data.get("code")
+    msg = data.get("message", "").strip()
+    if not code or not msg or code not in rooms:
+        return
+    p_info = next((p for p in rooms[code]["players"] if p["sid"] == request.sid), None)
+    if not p_info:
+        return
+    socketio.emit("chat_message", {"name": p_info["name"], "message": msg}, to=code)
+
+
 @socketio.on("disconnect")
 def handle_disconnect():
     for code, room in list(rooms.items()):
