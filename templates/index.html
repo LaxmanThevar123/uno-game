@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNO Card Game</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #fff; min-height: 100vh; overflow-x: hidden; }
+
+        /* SCREENS */
+        .screen { display: none; max-width: 500px; margin: 40px auto; padding: 30px; background: #16213e; border-radius: 16px; text-align: center; }
+        .screen.active { display: block; }
+        .screen h1 { font-size: 2.5rem; margin-bottom: 20px; }
+        .screen h2 { font-size: 1.5rem; margin-bottom: 15px; }
+        .screen input, .screen select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: none; font-size: 1rem; background: #0f3460; color: #fff; }
+        .screen input::placeholder { color: #888; }
+        .btn { padding: 12px 24px; margin: 8px 4px; border-radius: 8px; border: none; font-size: 1rem; cursor: pointer; font-weight: bold; transition: transform 0.1s; }
+        .btn:active { transform: scale(0.95); }
+        .btn-primary { background: #e94560; color: #fff; }
+        .btn-secondary { background: #533483; color: #fff; }
+        .btn-full { width: 100%; padding: 15px; font-size: 1.2rem; margin-top: 15px; }
+        .btn-small { padding: 8px 16px; font-size: 0.85rem; }
+
+        /* LOBBY */
+        .room-code { font-size: 2.5rem; font-weight: bold; letter-spacing: 8px; color: #e94560; background: #0f3460; padding: 15px; border-radius: 10px; margin: 15px 0; user-select: all; }
+        .player-list { text-align: left; margin: 15px 0; }
+        .player-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; margin: 5px 0; background: #0f3460; border-radius: 8px; }
+        .waiting { color: #aaa; font-style: italic; margin: 10px 0; }
+        .share-hint { font-size: 0.85rem; color: #aaa; margin: 10px 0; }
+
+        /* GAME BOARD */
+        .game-screen { display: none; padding: 15px; max-width: 1000px; margin: 0 auto; }
+        .game-screen.active { display: block; }
+        .opponents { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
+        .opponent { background: #16213e; padding: 10px 18px; border-radius: 12px; text-align: center; border: 2px solid #333; }
+        .opponent.active-turn { border-color: #4caf50; box-shadow: 0 0 10px #4caf50; }
+        .opponent .card-count { font-size: 1.4rem; font-weight: bold; color: #e94560; }
+
+        /* TABLE */
+        .table { display: flex; justify-content: center; align-items: center; gap: 25px; margin: 20px 0; }
+        .deck-pile { position: relative; cursor: pointer; }
+        .deck-card { width: 90px; height: 135px; background: linear-gradient(135deg, #1a1a2e, #533483); border-radius: 12px; border: 3px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 2rem; transition: transform 0.2s; }
+        .deck-card:hover { transform: scale(1.05); }
+        .deck-card.disabled { opacity: 0.5; cursor: not-allowed; }
+        .deck-card.disabled:hover { transform: none; }
+        .deck-count { position: absolute; bottom: -18px; width: 100%; text-align: center; font-size: 0.75rem; color: #aaa; }
+
+        .top-card { width: 90px; height: 135px; border-radius: 12px; border: 3px solid #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
+
+        /* HAND */
+        .hand-area { margin-top: 20px; text-align: center; }
+        .hand-label { font-size: 1rem; margin-bottom: 8px; color: #aaa; }
+        .hand { display: flex; justify-content: center; flex-wrap: wrap; padding: 10px 0; }
+        .card { width: 75px; height: 112px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; transition: all 0.3s ease; margin: 0 -8px; position: relative; transform: translateY(0); box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+        .card:hover { transform: translateY(-30px) scale(1.15); z-index: 10; box-shadow: 0 12px 30px rgba(0,0,0,0.5); border-color: #fff; }
+        .card.playable { border-color: #4caf50; animation: pulse 1.5s infinite; cursor: pointer; }
+        .card.playable:hover { animation: none; }
+        .card.disabled { opacity: 0.4; cursor: default; }
+        .card.disabled:hover { transform: translateY(0) scale(1); box-shadow: 0 4px 8px rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.2); }
+        .card .card-value { font-size: 1.3rem; }
+        .card .card-type { font-size: 0.6rem; margin-top: 3px; text-align: center; }
+
+        @keyframes pulse { 0%,100% { box-shadow: 0 0 5px #4caf50; } 50% { box-shadow: 0 0 20px #4caf50; } }
+
+        /* COLORS */
+        .color-Red { background: linear-gradient(135deg, #d32f2f, #b71c1c); color: #fff; }
+        .color-Blue { background: linear-gradient(135deg, #1565c0, #0d47a1); color: #fff; }
+        .color-Green { background: linear-gradient(135deg, #2e7d32, #1b5e20); color: #fff; }
+        .color-Yellow { background: linear-gradient(135deg, #f9a825, #f57f17); color: #333; }
+        .color-Wild { background: linear-gradient(135deg, #333, #111); color: #fff; }
+
+        /* COLOR PICKER */
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center; }
+        .overlay.active { display: flex; }
+        .color-options { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 30px; background: #16213e; border-radius: 16px; }
+        .color-options h2 { grid-column: span 2; text-align: center; }
+        .color-btn { width: 70px; height: 70px; border-radius: 50%; border: 4px solid #fff; cursor: pointer; transition: transform 0.2s; margin: 0 auto; }
+        .color-btn:hover { transform: scale(1.2); }
+        .color-btn.red { background: #d32f2f; }
+        .color-btn.blue { background: #1565c0; }
+        .color-btn.green { background: #2e7d32; }
+        .color-btn.yellow { background: #f9a825; }
+
+        /* MESSAGES */
+        .messages { max-width: 600px; margin: 10px auto; padding: 10px; background: #16213e; border-radius: 10px; max-height: 100px; overflow-y: auto; font-size: 0.85rem; }
+        .messages p { padding: 2px 0; border-bottom: 1px solid #0f3460; }
+
+        /* DIRECTION & TURN */
+        .game-info { display: flex; justify-content: center; gap: 20px; align-items: center; margin: 10px 0; font-size: 0.9rem; color: #aaa; }
+        .turn-indicator { color: #4caf50; font-weight: bold; font-size: 1rem; }
+        .not-your-turn { color: #e94560; }
+
+        /* WINNER */
+        .winner-content { text-align: center; }
+        .winner-content h1 { font-size: 2.5rem; margin-bottom: 20px; }
+
+        /* TOAST */
+        .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #e94560; padding: 12px 24px; border-radius: 8px; font-weight: bold; z-index: 300; display: none; }
+        .toast.show { display: block; animation: fadeOut 3s forwards; }
+        @keyframes fadeOut { 0%,70% { opacity: 1; } 100% { opacity: 0; } }
+
+        /* MOBILE */
+        @media (max-width: 600px) {
+            .screen { margin: 15px; padding: 20px; }
+            .card { width: 58px; height: 87px; margin: 0 -6px; }
+            .card .card-value { font-size: 1rem; }
+            .card .card-type { font-size: 0.5rem; }
+            .card:hover { transform: translateY(-20px) scale(1.1); }
+            .top-card, .deck-card { width: 70px; height: 105px; }
+            .room-code { font-size: 2rem; letter-spacing: 5px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<!-- HOME SCREEN -->
+<div class="screen active" id="homeScreen">
+    <h1>🃏 UNO</h1>
+    <input type="text" id="playerName" placeholder="Enter your name" maxlength="15">
+    <button class="btn btn-primary btn-full" onclick="createRoom()">🏠 Create Room</button>
+    <div style="margin: 20px 0; color: #aaa;">— or —</div>
+    <input type="text" id="joinCode" placeholder="Enter Room Code" maxlength="6" style="text-transform:uppercase; text-align:center; letter-spacing:4px; font-size:1.3rem;">
+    <button class="btn btn-secondary btn-full" onclick="joinRoom()">🚪 Join Room</button>
+</div>
+
+<!-- LOBBY SCREEN -->
+<div class="screen" id="lobbyScreen">
+    <h2>Room Lobby</h2>
+    <div class="room-code" id="roomCode"></div>
+    <p class="share-hint">Share this code with friends to join!</p>
+    <div class="player-list" id="playerList"></div>
+    <div id="hostControls" style="display:none;">
+        <div style="display:flex; gap:8px; margin-top:15px;">
+            <button class="btn btn-secondary btn-small" onclick="addBot()">🤖 + Bot</button>
+            <button class="btn btn-secondary btn-small" onclick="removeBot()">🤖 - Bot</button>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="startGame()">▶️ Start Game</button>
+    </div>
+    <p class="waiting" id="waitingMsg">Waiting for host to start...</p>
+</div>
+
+<!-- GAME SCREEN -->
+<div class="game-screen" id="gameScreen">
+    <div class="opponents" id="opponents"></div>
+    <div class="game-info">
+        <span id="direction">➡️ Clockwise</span>
+        <span id="turnIndicator"></span>
+    </div>
+    <div class="table">
+        <div class="deck-pile" id="deckPile" onclick="drawCard()">
+            <div class="deck-card" id="deckCard">🃏</div>
+            <div class="deck-count" id="deckCount"></div>
+        </div>
+        <div>
+            <div class="top-card" id="topCard"></div>
+        </div>
+    </div>
+    <div class="messages" id="messages"></div>
+    <div class="hand-area">
+        <div class="hand-label" id="handLabel">Your Hand</div>
+        <div class="hand" id="hand"></div>
+    </div>
+</div>
+
+<!-- COLOR PICKER -->
+<div class="overlay" id="colorPicker">
+    <div class="color-options">
+        <h2>Pick a Color</h2>
+        <div class="color-btn red" onclick="pickColor('Red')"></div>
+        <div class="color-btn blue" onclick="pickColor('Blue')"></div>
+        <div class="color-btn green" onclick="pickColor('Green')"></div>
+        <div class="color-btn yellow" onclick="pickColor('Yellow')"></div>
+    </div>
+</div>
+
+<!-- WINNER OVERLAY -->
+<div class="overlay" id="winnerOverlay">
+    <div class="winner-content">
+        <h1 id="winnerText">🏆</h1>
+        <button class="btn btn-primary" onclick="location.reload()">🔄 Play Again</button>
+    </div>
+</div>
+
+<script>
+const socket = io();
+let roomCode = null;
+let isHost = false;
+let myName = '';
+let pendingCardIndex = null;
+let isMyTurn = false;
+
+// --- NAVIGATION ---
+function showScreen(id) {
+    document.querySelectorAll('.screen, .game-screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show';
+    setTimeout(() => t.className = 'toast', 3000);
+}
+
+// --- HOME ---
+function createRoom() {
+    myName = document.getElementById('playerName').value.trim() || 'Player';
+    socket.emit('create_room', { name: myName });
+}
+
+function joinRoom() {
+    myName = document.getElementById('playerName').value.trim() || 'Player';
+    const code = document.getElementById('joinCode').value.trim().toUpperCase();
+    if (!code) { showToast('Enter a room code!'); return; }
+    socket.emit('join_room', { code: code, name: myName });
+}
+
+// --- LOBBY ---
+function addBot() { socket.emit('add_bot', { code: roomCode }); }
+function removeBot() { socket.emit('remove_bot', { code: roomCode }); }
+function startGame() { socket.emit('start_game', { code: roomCode }); }
+
+function renderLobby(players) {
+    const list = document.getElementById('playerList');
+    list.innerHTML = players.map((p, i) => 
+        `<div class="player-item"><span>${p.includes('Bot') ? '🤖' : '👤'} ${p}</span>${i === 0 ? '<span style="color:#4caf50;">Host</span>' : ''}</div>`
+    ).join('');
+}
+
+// --- GAME ---
+function getCardSymbol(type) {
+    const s = { 'Skip': '🚫', 'Reverse': '🔄', 'Draw Two': '+2', 'Wild': '🌈', 'Wild Draw Four': '+4' };
+    return s[type] || type;
+}
+
+function renderState(state) {
+    isMyTurn = state.is_your_turn;
+
+    // Opponents
+    const oppDiv = document.getElementById('opponents');
+    oppDiv.innerHTML = state.opponents.map(o => {
+        const isActive = o.name === state.current_player;
+        return `<div class="opponent ${isActive ? 'active-turn' : ''}"><div>${o.is_ai ? '🤖' : '👤'} ${o.name}</div><div class="card-count">${o.cards}</div><div style="font-size:0.75rem;">cards</div></div>`;
+    }).join('');
+
+    // Info
+    document.getElementById('direction').textContent = state.direction === 1 ? '➡️ Clockwise' : '⬅️ Counter-clockwise';
+    const turnEl = document.getElementById('turnIndicator');
+    if (state.is_your_turn) {
+        turnEl.className = 'turn-indicator';
+        turnEl.textContent = '🟢 Your Turn!';
+    } else {
+        turnEl.className = 'not-your-turn';
+        turnEl.textContent = `⏳ ${state.current_player}'s turn`;
+    }
+
+    // Deck
+    document.getElementById('deckCount').textContent = `${state.deck_count} left`;
+    const deckCard = document.getElementById('deckCard');
+    deckCard.className = state.is_your_turn ? 'deck-card' : 'deck-card disabled';
+
+    // Top card
+    const topEl = document.getElementById('topCard');
+    const tc = state.top_card;
+    const eColor = tc.effective_color || tc.color;
+    topEl.className = `top-card color-${eColor}`;
+    topEl.innerHTML = `<div class="card-value">${getCardSymbol(tc.type)}</div><div class="card-type">${tc.type}</div><div style="font-size:0.6rem;margin-top:4px;">${eColor}</div>`;
+
+    // Hand
+    const handDiv = document.getElementById('hand');
+    handDiv.innerHTML = state.hand.map((c, i) => {
+        const playable = c.playable && state.is_your_turn;
+        const cls = playable ? 'card playable' : 'card disabled';
+        return `<div class="${cls} color-${c.color}" onclick="${playable ? `playCard(${i})` : ''}" title="${c.label}">
+            <div class="card-value">${getCardSymbol(c.type)}</div>
+            <div class="card-type">${c.color === 'Wild' ? c.type : c.type}</div>
+        </div>`;
+    }).join('');
+    document.getElementById('handLabel').textContent = `Your Hand (${state.hand.length} cards)`;
+
+    // Messages
+    if (state.messages && state.messages.length) {
+        const msgDiv = document.getElementById('messages');
+        msgDiv.innerHTML = state.messages.map(m => `<p>${m}</p>`).join('');
+        msgDiv.scrollTop = msgDiv.scrollHeight;
+    }
+
+    // Winner
+    if (state.game_over) {
+        document.getElementById('winnerText').textContent = state.winner === state.player_name ? '🏆 You Win!' : `🏆 ${state.winner} Wins!`;
+        document.getElementById('winnerOverlay').classList.add('active');
+    }
+}
+
+function playCard(index) {
+    if (!isMyTurn) return;
+    // Check if wild — need color picker
+    const cards = document.querySelectorAll('.hand .card');
+    const card = cards[index];
+    if (card && card.classList.contains('color-Wild')) {
+        pendingCardIndex = index;
+        document.getElementById('colorPicker').classList.add('active');
+        return;
+    }
+    socket.emit('play_card', { code: roomCode, card_index: index });
+}
+
+function pickColor(color) {
+    document.getElementById('colorPicker').classList.remove('active');
+    socket.emit('play_card', { code: roomCode, card_index: pendingCardIndex, color: color });
+    pendingCardIndex = null;
+}
+
+function drawCard() {
+    if (!isMyTurn) return;
+    socket.emit('draw_card', { code: roomCode });
+}
+
+// --- SOCKET EVENTS ---
+socket.on('room_created', (data) => {
+    roomCode = data.code;
+    isHost = true;
+    document.getElementById('roomCode').textContent = data.code;
+    document.getElementById('hostControls').style.display = 'block';
+    document.getElementById('waitingMsg').style.display = 'none';
+    renderLobby(data.players);
+    showScreen('lobbyScreen');
+});
+
+socket.on('room_update', (data) => {
+    roomCode = data.code;
+    renderLobby(data.players);
+    if (!isHost) showScreen('lobbyScreen');
+});
+
+socket.on('game_started', () => {
+    showScreen('gameScreen');
+});
+
+socket.on('game_state', (state) => {
+    showScreen('gameScreen');
+    renderState(state);
+});
+
+socket.on('error', (data) => {
+    showToast(data.msg);
+});
+</script>
+</body>
+</html>
