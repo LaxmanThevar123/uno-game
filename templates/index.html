@@ -33,28 +33,42 @@
         /* GAME BOARD */
         .game-screen { display: none; padding: 15px; max-width: 1000px; margin: 0 auto; }
         .game-screen.active { display: block; }
-        .opponents { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; position: relative; }
-        .opponent { background: #16213e; padding: 10px 18px; border-radius: 12px; text-align: center; border: 2px solid #333; position: relative; }
-        .opponent.active-turn { border-color: #4caf50; box-shadow: 0 0 10px #4caf50; }
-        .opponent.finished { opacity: 0.6; border-color: #f8d80e; }
-        .opponent.is-you { border-color: #e94560; }
-        .opponent .card-count { font-size: 1.4rem; font-weight: bold; color: #e94560; }
-        .opponent .rank-badge { position: absolute; top: -8px; right: -8px; background: #f8d80e; color: #333; width: 20px; height: 20px; border-radius: 50%; font-size: 0.7rem; font-weight: bold; display: flex; align-items: center; justify-content: center; }
-        .seating-arrow { color: #4caf50; font-size: 1.2rem; display: flex; align-items: center; }
-        .seating-container { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; padding: 10px; background: #0f3460; border-radius: 12px; }
 
-        /* TABLE */
-        .table { display: flex; justify-content: center; align-items: center; gap: 25px; margin: 20px 0; }
+        /* CIRCULAR TABLE */
+        .table-area { position: relative; width: 100%; max-width: 500px; height: 340px; margin: 0 auto 10px; }
+        .felt-table { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; height: 220px; border-radius: 50%; background: radial-gradient(ellipse, #2d6b3f, #1b4d2e); border: 10px solid #5c3a1e; box-shadow: 0 0 0 3px #3d2510, 0 10px 40px rgba(0,0,0,0.6), inset 0 0 30px rgba(0,0,0,0.3); }
+        .direction-ring { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 260px; height: 200px; border-radius: 50%; border: 2px dashed rgba(255,255,255,0.15); pointer-events: none; }
+        .direction-arrow { position: absolute; color: rgba(255,255,255,0.4); font-size: 1rem; }
+        .direction-arrow.cw-top { top: -2px; left: 50%; transform: translateX(-50%); }
+        .direction-arrow.cw-right { right: -2px; top: 50%; transform: translateY(-50%); }
+        .direction-arrow.cw-bottom { bottom: -2px; left: 50%; transform: translateX(-50%); }
+        .direction-arrow.cw-left { left: -2px; top: 50%; transform: translateY(-50%); }
+
+        /* Cards in center of table */
+        .table-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; gap: 10px; align-items: center; }
         .deck-pile { position: relative; cursor: pointer; }
-        .deck-card { width: 95px; height: 140px; background: #1a1a1a; border-radius: 8px; border: 3px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: transform 0.2s; position: relative; overflow: hidden; color: #fff; font-weight: bold; font-family: 'Arial Black', sans-serif; }
+        .deck-card { width: 60px; height: 90px; background: #1a1a1a; border-radius: 8px; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; position: relative; overflow: hidden; font-weight: bold; font-family: 'Arial Black', sans-serif; }
         .deck-card::before { content: ''; position: absolute; width: 110%; height: 60%; background: #ed1c24; border-radius: 50%; transform: rotate(-10deg); }
-        .deck-card::after { content: 'UNO'; position: relative; z-index: 2; font-size: 1.3rem; color: #f8d80e; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); letter-spacing: 1px; }
-        .deck-card:hover { transform: scale(1.05); }
+        .deck-card::after { content: 'UNO'; position: relative; z-index: 2; font-size: 0.85rem; color: #f8d80e; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); letter-spacing: 1px; }
+        .deck-card:hover { transform: scale(1.08); }
         .deck-card.disabled { opacity: 0.5; cursor: not-allowed; }
         .deck-card.disabled:hover { transform: none; }
-        .deck-count { position: absolute; bottom: -18px; width: 100%; text-align: center; font-size: 0.75rem; color: #aaa; }
+        .deck-count { position: absolute; bottom: -14px; width: 100%; text-align: center; font-size: 0.6rem; color: #aaa; }
+        .top-card { width: 60px; height: 90px; border-radius: 8px; border: 2px solid #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.5); position: relative; overflow: hidden; }
 
-        .top-card { width: 95px; height: 140px; border-radius: 8px; border: 3px solid #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; box-shadow: 0 8px 25px rgba(0,0,0,0.5); position: relative; overflow: hidden; }
+        /* Player seats around table */
+        .seat { position: absolute; text-align: center; transition: all 0.3s; z-index: 5; }
+        .seat-top { top: 0; left: 50%; transform: translateX(-50%); }
+        .seat-left { left: 5px; top: 50%; transform: translateY(-50%); }
+        .seat-right { right: 5px; top: 50%; transform: translateY(-50%); }
+        .seat-bottom { bottom: 0; left: 50%; transform: translateX(-50%); }
+        .seat-info { background: #16213e; padding: 6px 12px; border-radius: 10px; border: 2px solid #333; white-space: nowrap; font-size: 0.75rem; position: relative; }
+        .seat-info.active-turn { border-color: #4caf50; box-shadow: 0 0 12px #4caf50; }
+        .seat-info.finished { opacity: 0.5; border-color: #f8d80e; }
+        .seat-info.is-you { border-color: #e94560; box-shadow: 0 0 8px rgba(233,69,96,0.4); }
+        .seat-info .seat-name { font-weight: bold; font-size: 0.7rem; }
+        .seat-info .seat-cards { font-size: 1rem; font-weight: bold; color: #e94560; }
+        .seat-info .rank-badge { position: absolute; top: -8px; right: -8px; background: #f8d80e; color: #333; width: 18px; height: 18px; border-radius: 50%; font-size: 0.6rem; font-weight: bold; display: flex; align-items: center; justify-content: center; }
 
         /* HAND */
         .hand-area { margin-top: 20px; text-align: center; }
@@ -144,13 +158,20 @@
         /* MOBILE */
         @media (max-width: 600px) {
             .screen { margin: 15px; padding: 20px; }
-            .card { width: 62px; height: 93px; margin: 0 -8px; }
-            .card .card-value { font-size: 1.3rem; }
-            .card .card-corner { font-size: 0.5rem; }
+            .card { width: 58px; height: 87px; margin: 0 -8px; }
+            .card .card-value { font-size: 1.2rem; }
+            .card .card-corner { font-size: 0.45rem; }
             .card:hover { transform: translateY(-20px) scale(1.15); }
-            .top-card, .deck-card { width: 72px; height: 108px; }
-            .deck-card::after { font-size: 1rem; }
             .room-code { font-size: 2rem; letter-spacing: 5px; }
+            .table-area { height: 280px; }
+            .felt-table { width: 220px; height: 180px; border-width: 7px; }
+            .direction-ring { width: 200px; height: 160px; }
+            .deck-card { width: 48px; height: 72px; }
+            .deck-card::after { font-size: 0.7rem; }
+            .top-card { width: 48px; height: 72px; font-size: 0.75rem; }
+            .seat-info { padding: 4px 8px; font-size: 0.65rem; }
+            .seat-info .seat-cards { font-size: 0.85rem; }
+            .direction-arrow { font-size: 0.8rem; }
         }
     </style>
 </head>
@@ -186,19 +207,27 @@
 
 <!-- GAME SCREEN -->
 <div class="game-screen" id="gameScreen">
-    <div class="seating-container" id="seatingContainer"></div>
-    <div class="game-info">
+    <div class="game-info" style="margin-bottom:5px;">
         <span id="direction">➡️ Clockwise</span>
         <span id="turnIndicator"></span>
     </div>
-    <div class="table">
-        <div class="deck-pile" id="deckPile" onclick="drawCard()">
-            <div class="deck-card" id="deckCard"></div>
-            <div class="deck-count" id="deckCount"></div>
+    <div class="table-area">
+        <div class="felt-table">
+            <div class="direction-ring">
+                <span class="direction-arrow cw-top" id="arrTop">→</span>
+                <span class="direction-arrow cw-right" id="arrRight">↓</span>
+                <span class="direction-arrow cw-bottom" id="arrBottom">←</span>
+                <span class="direction-arrow cw-left" id="arrLeft">↑</span>
+            </div>
+            <div class="table-center">
+                <div class="deck-pile" onclick="drawCard()">
+                    <div class="deck-card" id="deckCard"></div>
+                    <div class="deck-count" id="deckCount"></div>
+                </div>
+                <div class="top-card" id="topCard"></div>
+            </div>
         </div>
-        <div>
-            <div class="top-card" id="topCard"></div>
-        </div>
+        <div id="seats"></div>
     </div>
     <div class="messages" id="messages"></div>
     <div class="hand-area">
@@ -296,30 +325,45 @@ function getCornerText(type) {
 function renderState(state) {
     isMyTurn = state.is_your_turn;
 
-    // Circular seating
-    const seatDiv = document.getElementById('seatingContainer');
-    const arrow = state.direction === 1 ? '→' : '←';
-    let seatHtml = '';
-    state.seating.forEach((p, i) => {
-        let cls = 'opponent';
+    // Seat positions based on player count (you are always bottom)
+    const positions = {
+        2: ['seat-top', 'seat-bottom'],
+        3: ['seat-top', 'seat-left', 'seat-bottom'],
+        4: ['seat-top', 'seat-left', 'seat-right', 'seat-bottom']
+    };
+
+    // Reorder seating: you at bottom, others distributed
+    const others = state.seating.filter(p => !p.is_you);
+    const me = state.seating.find(p => p.is_you);
+    let ordered = [];
+    const count = state.seating.length;
+    if (count === 2) { ordered = [others[0], me]; }
+    else if (count === 3) { ordered = [others[0], others[1], me]; }
+    else { ordered = [others[0], others[1], others[2], me]; }
+
+    const pos = positions[count] || positions[4];
+    const seatsDiv = document.getElementById('seats');
+    seatsDiv.innerHTML = ordered.map((p, i) => {
+        let cls = 'seat-info';
         if (p.is_current) cls += ' active-turn';
         if (p.finished) cls += ' finished';
         if (p.is_you) cls += ' is-you';
         const icon = p.is_you ? '🧑' : (p.is_ai ? '🤖' : '👤');
-        const label = p.is_you ? `${p.name} (You)` : p.name;
-        const status = p.finished ? '👁️ Watching' : `${p.cards} cards`;
+        const name = p.is_you ? 'You' : p.name;
+        const cardText = p.finished ? '👁️' : p.cards;
         const rank = state.finished && state.finished.indexOf(p.name) !== -1 ? `<span class="rank-badge">#${state.finished.indexOf(p.name)+1}</span>` : '';
-        seatHtml += `<div class="${cls}">${rank}<div>${icon} ${label}</div><div class="card-count">${p.finished ? '👁️' : p.cards}</div><div style="font-size:0.7rem;">${status}</div></div>`;
-        if (i < state.seating.length - 1) {
-            seatHtml += `<span class="seating-arrow">${arrow}</span>`;
-        }
-    });
-    // Close the circle with arrow back to first
-    seatHtml += `<span class="seating-arrow">${arrow}</span>`;
-    seatDiv.innerHTML = seatHtml;
+        return `<div class="seat ${pos[i]}"><div class="${cls}" style="position:relative;">${rank}<div>${icon} ${name}</div><div class="seat-cards">${cardText}</div></div></div>`;
+    }).join('');
+
+    // Direction arrows
+    const cw = state.direction === 1;
+    document.getElementById('arrTop').textContent = cw ? '→' : '←';
+    document.getElementById('arrRight').textContent = cw ? '↓' : '↑';
+    document.getElementById('arrBottom').textContent = cw ? '←' : '→';
+    document.getElementById('arrLeft').textContent = cw ? '↑' : '↓';
 
     // Info
-    document.getElementById('direction').textContent = state.direction === 1 ? '➡️ Clockwise' : '⬅️ Counter-clockwise';
+    document.getElementById('direction').textContent = cw ? '➡️ Clockwise' : '⬅️ Counter-clockwise';
     const turnEl = document.getElementById('turnIndicator');
     if (state.is_your_turn) {
         turnEl.className = 'turn-indicator';
