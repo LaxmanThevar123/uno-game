@@ -146,6 +146,15 @@
         .turn-indicator { color: #4caf50; font-weight: bold; font-size: 1rem; }
         .not-your-turn { color: #e94560; }
 
+        /* TIMER */
+        .timer-bar { width: 100%; max-width: 500px; height: 6px; background: #333; border-radius: 3px; margin: 5px auto; overflow: hidden; }
+        .timer-fill { height: 100%; background: #4caf50; border-radius: 3px; transition: width 1s linear; }
+        .timer-fill.warning { background: #f9a825; }
+        .timer-fill.danger { background: #e94560; }
+        .timer-text { text-align: center; font-size: 0.75rem; color: #aaa; margin-bottom: 5px; }
+        .seat-info.locked { opacity: 0.3; border-color: #666; }
+        .locked-badge { position: absolute; top: -8px; left: -8px; background: #666; color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 0.6rem; display: flex; align-items: center; justify-content: center; }
+
         /* WINNER */
         .winner-content { text-align: center; }
         .winner-content h1 { font-size: 2.5rem; margin-bottom: 20px; }
@@ -211,6 +220,8 @@
         <span id="direction">➡️ Clockwise</span>
         <span id="turnIndicator"></span>
     </div>
+    <div class="timer-text" id="timerText"></div>
+    <div class="timer-bar"><div class="timer-fill" id="timerFill" style="width:100%"></div></div>
     <div class="table-area">
         <div class="felt-table">
             <div class="direction-ring">
@@ -273,6 +284,8 @@ let isHost = false;
 let myName = '';
 let pendingCardIndex = null;
 let isMyTurn = false;
+let timerInterval = null;
+let timeLeft = 30;
 
 // --- NAVIGATION ---
 function showScreen(id) {
@@ -347,12 +360,14 @@ function renderState(state) {
         let cls = 'seat-info';
         if (p.is_current) cls += ' active-turn';
         if (p.finished) cls += ' finished';
+        if (p.locked) cls += ' locked';
         if (p.is_you) cls += ' is-you';
         const icon = p.is_you ? '🧑' : (p.is_ai ? '🤖' : '👤');
         const name = p.is_you ? 'You' : p.name;
-        const cardText = p.finished ? '👁️' : p.cards;
+        const cardText = p.finished ? '👁️' : (p.locked ? '🔒' : p.cards);
         const rank = state.finished && state.finished.indexOf(p.name) !== -1 ? `<span class="rank-badge">#${state.finished.indexOf(p.name)+1}</span>` : '';
-        return `<div class="seat ${pos[i]}"><div class="${cls}" style="position:relative;">${rank}<div>${icon} ${name}</div><div class="seat-cards">${cardText}</div></div></div>`;
+        const lockBadge = p.locked ? '<span class="locked-badge">🔒</span>' : '';
+        return `<div class="seat ${pos[i]}"><div class="${cls}" style="position:relative;">${rank}${lockBadge}<div>${icon} ${name}</div><div class="seat-cards">${cardText}</div></div></div>`;
     }).join('');
 
     // Direction arrows
@@ -412,7 +427,42 @@ function renderState(state) {
     if (state.game_over) {
         document.getElementById('winnerText').textContent = state.winner === state.player_name ? '🏆 You Win!' : `🏆 ${state.winner} Wins!`;
         document.getElementById('winnerOverlay').classList.add('active');
+        stopTimer();
+        return;
     }
+
+    // Timer
+    startTimer(state.timer || 30);
+}
+
+function startTimer(seconds) {
+    stopTimer();
+    timeLeft = seconds;
+    updateTimerDisplay();
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+            stopTimer();
+            timeLeft = 0;
+        }
+        updateTimerDisplay();
+    }, 1000);
+}
+
+function stopTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+}
+
+function updateTimerDisplay() {
+    const fill = document.getElementById('timerFill');
+    const text = document.getElementById('timerText');
+    const pct = (timeLeft / 30) * 100;
+    fill.style.width = pct + '%';
+    fill.className = 'timer-fill' + (timeLeft <= 5 ? ' danger' : timeLeft <= 10 ? ' warning' : '');
+    text.textContent = isMyTurn ? `⏱️ ${timeLeft}s remaining` : `⏳ ${timeLeft}s`;
 }
 
 function playCard(index) {

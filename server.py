@@ -5,13 +5,17 @@ from game.player import Player
 from game.card import Card
 import secrets
 import string
+import threading
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+TURN_TIMEOUT = 30
+
 # rooms[code] = { "host": sid, "players": [{sid, name}], "bots": int, "game": Game, "started": bool }
 rooms = {}
+turn_timers = {}
 
 
 def generate_code():
@@ -52,7 +56,8 @@ def get_player_state(room_code, player_name):
             "is_ai": p.is_ai,
             "is_current": p == game.current_player,
             "is_you": p.name == player_name,
-            "finished": p.name in room.get("finished", [])
+            "finished": p.name in room.get("finished", []),
+            "locked": p.name in room.get("locked", [])
         })
 
     top = game.top_card
@@ -77,6 +82,10 @@ def get_player_state(room_code, player_name):
 def broadcast_state(room_code, messages=None, winner=None):
     room = rooms[room_code]
     game = room["game"]
+
+    # Cancel existing timer
+    cancel_timer(room_code)
+
     for p_info in room["players"]:
         state = get_player_state(room_code, p_info["name"])
         if messages:
@@ -84,7 +93,72 @@ def broadcast_state(room_code, messages=None, winner=None):
         if winner:
             state["game_over"] = True
             state["winner"] = winner
+        state["locked"] = room.get("locked", [])
+        state["timer"] = TURN_TIMEOUT
         socketio.emit("game_state", state, to=p_info["sid"])
+
+    # Start timer for current player if not AI and game not over
+    if not winner and not game.current_player.is_ai:
+        start_timer(room_code)
+
+
+def cancel_timer(room_code):
+    if room_code in turn_timers:
+        turn_timers[room_code].cancel()
+        del turn_timers[room_code]
+
+
+def start_timer(room_code):
+    cancel_timer(room_code)
+    timer = threading.Timer(TURN_TIMEOUT, handle_timeout, args=[room_code])
+    timer.daemon = True
+    timer.start()
+    turn_timers[room_code] = timer
+
+
+def handle_timeout(room_code):
+    """Called when a player's 30s runs out."""
+    if room_code not in rooms:
+        return
+    room = rooms[room_code]
+    game = room["game"]
+    player = game.current_player
+
+    if player.is_ai or player.name in room.get("finished", []):
+        return
+
+    # Track missed turns
+    if "misses" not in room:
+        room["misses"] = {}
+    room["misses"][player.name] = room["misses"].get(player.name, 0) + 1
+    messages = [f"\u23f0 {player.name} ran out of time! Turn skipped."]
+
+    # Lock after 2 consecutive misses
+    if room["misses"][player.name] >= 2:
+        if "locked" not in room:
+            room["locked"] = []
+        if player.name not in room["locked"]:
+            room["locked"].append(player.name)
+            messages.append(f"\U0001f512 {player.name} is locked out for inactivity!")
+
+    # Auto-draw and skip
+    game.draw_card(player)
+    game.advance_turn()
+
+    # Skip locked/finished players
+    while game.current_player.name in room.get("finished", []) + room.get("locked", []):
+        game.advance_turn()
+
+    # Check if only 1 active player left
+    active = [p for p in game.players if p.name not in room.get("finished", []) + room.get("locked", [])]
+    if len(active) <= 1:
+        winner = room.get("finished", [None])[0] or active[0].name if active else None
+        broadcast_state(room_code, messages, winner)
+        return
+
+    ai_msgs, winner = run_ai_turns(room_code)
+    messages.extend(ai_msgs)
+    broadcast_state(room_code, messages, winner)
 
 
 def check_winner(room_code, player, messages):
@@ -267,7 +341,9 @@ def handle_start(data):
 
     room["game"] = Game(players)
     room["started"] = True
-    room["finished"] = []  # Track players who finished
+    room["finished"] = []
+    room["locked"] = []
+    room["misses"] = {}
     room["total_players"] = len(players)
 
     # Run AI if first turn is bot
@@ -296,11 +372,18 @@ def handle_play(data):
     if game.current_player != player:
         emit("error", {"msg": "Not your turn!"})
         return
+    if player.name in room.get("locked", []):
+        emit("error", {"msg": "You are locked out!"})
+        return
 
     card = player.hand[card_idx]
     if not card.matches(game.effective_top):
         emit("error", {"msg": "Invalid move!"})
         return
+
+    # Reset miss counter on successful play
+    if "misses" in room:
+        room["misses"][player.name] = 0
 
     messages = []
     played = player.play_card(card_idx)
@@ -360,6 +443,13 @@ def handle_draw(data):
     if game.current_player != player:
         emit("error", {"msg": "Not your turn!"})
         return
+    if player.name in room.get("locked", []):
+        emit("error", {"msg": "You are locked out!"})
+        return
+
+    # Reset miss counter on draw
+    if "misses" in room:
+        room["misses"][player.name] = 0
 
     messages = []
     drawn = game.draw_card(player)
