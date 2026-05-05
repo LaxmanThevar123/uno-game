@@ -273,7 +273,7 @@
 <div class="overlay" id="winnerOverlay">
     <div class="winner-content">
         <h1 id="winnerText">🏆</h1>
-        <button class="btn btn-primary" onclick="location.reload()">🔄 Play Again</button>
+        <button class="btn btn-primary" onclick="playAgain()">🔄 Play Again</button>
     </div>
 </div>
 
@@ -489,6 +489,14 @@ function drawCard() {
     socket.emit('draw_card', { code: roomCode });
 }
 
+function playAgain() {
+    if (isHost) {
+        socket.emit('restart_game', { code: roomCode });
+    } else {
+        showToast('Waiting for host to restart...');
+    }
+}
+
 // --- CHAT ---
 let chatOpen = false;
 let unreadCount = 0;
@@ -544,6 +552,11 @@ socket.on('room_update', (data) => {
 });
 
 socket.on('game_started', () => {
+    showScreen('gameScreen');
+});
+
+socket.on('game_restarted', () => {
+    document.getElementById('winnerOverlay').classList.remove('active');
     showScreen('gameScreen');
 });
 

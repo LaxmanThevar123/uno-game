@@ -22,6 +22,17 @@ def generate_code():
     return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
 
 
+def next_active_player_index(game, room):
+    """Find next player index skipping finished and locked players."""
+    skip_list = room.get("finished", []) + room.get("locked", [])
+    idx = game.current_index
+    for _ in range(len(game.players)):
+        idx = (idx + game.direction) % len(game.players)
+        if game.players[idx].name not in skip_list:
+            return idx
+    return game.next_player_index()
+
+
 def card_to_dict(card):
     return {"color": card.color or "Wild", "type": str(card.card_type), "label": f"{card.color or ''} {card.card_type}".strip()}
 
@@ -201,7 +212,7 @@ def run_ai_turns(room_code):
                 color = player.ai_choose_color()
                 game.top_color = color
                 if card.card_type == "Wild Draw Four":
-                    nxt = game.next_player_index()
+                    nxt = next_active_player_index(game, room)
                     game.players[nxt].add_cards(game.deck.draw_multiple(4))
                     game.advance_turn()
                 messages.append(f"🤖 {player.name} plays {card.card_type} → {color}")
@@ -217,7 +228,7 @@ def run_ai_turns(room_code):
                     color = player.ai_choose_color()
                     game.top_color = color
                     if drawn.card_type == "Wild Draw Four":
-                        nxt = game.next_player_index()
+                        nxt = next_active_player_index(game, room)
                         game.players[nxt].add_cards(game.deck.draw_multiple(4))
                         game.advance_turn()
                 else:
@@ -392,7 +403,7 @@ def handle_play(data):
     if played.is_wild():
         game.top_color = chosen_color or "Red"
         if played.card_type == "Wild Draw Four":
-            nxt = game.next_player_index()
+            nxt = next_active_player_index(game, room)
             game.players[nxt].add_cards(game.deck.draw_multiple(4))
             messages.append(f"{game.players[nxt].name} draws 4 cards!")
             game.advance_turn()
@@ -400,13 +411,18 @@ def handle_play(data):
     else:
         if played.card_type == "Skip":
             messages.append(f"{player.name} plays Skip!")
+            game.apply_action(played, None)
         elif played.card_type == "Draw Two":
-            messages.append(f"{player.name} plays Draw Two!")
+            nxt = next_active_player_index(game, room)
+            game.players[nxt].add_cards(game.deck.draw_multiple(2))
+            messages.append(f"{player.name} plays Draw Two! {game.players[nxt].name} draws 2.")
+            game.advance_turn()  # skip affected player
         elif played.card_type == "Reverse":
             messages.append(f"{player.name} plays Reverse!")
+            game.apply_action(played, None)
         else:
             messages.append(f"{player.name} plays {played.color} {played.card_type}")
-        game.apply_action(played, None)
+            game.apply_action(played, None)
 
     if player.has_uno():
         messages.append(f"🎉 {player.name} says UNO!")
@@ -465,6 +481,30 @@ def handle_draw(data):
     ai_msgs, winner = run_ai_turns(code)
     messages.extend(ai_msgs)
     broadcast_state(code, messages, winner)
+
+
+@socketio.on("restart_game")
+def handle_restart(data):
+    code = data.get("code")
+    if code not in rooms:
+        return
+    room = rooms[code]
+    if request.sid != room["host"]:
+        emit("error", {"msg": "Only host can restart!"})
+        return
+
+    players = [Player(p["name"]) for p in room["players"]]
+    for i in range(room["bots"]):
+        players.append(Player(f"Bot {i+1}", is_ai=True))
+
+    room["game"] = Game(players)
+    room["finished"] = []
+    room["locked"] = []
+    room["misses"] = {}
+
+    messages, winner = run_ai_turns(code)
+    broadcast_state(code, messages, winner)
+    socketio.emit("game_restarted", {}, to=code)
 
 
 @socketio.on("chat_message")
