@@ -25,19 +25,35 @@ def card_to_dict(card):
 def get_player_state(room_code, player_name):
     room = rooms[room_code]
     game = room["game"]
-    player = next(p for p in game.players if p.name == player_name)
-    playable = player.playable_cards(game.effective_top) if game.current_player == player else []
+    player = next((p for p in game.players if p.name == player_name), None)
+    eliminated = player_name in room.get("finished", [])
+
+    playable = []
+    if player and not eliminated and game.current_player == player:
+        playable = player.playable_cards(game.effective_top)
 
     hand = []
-    for c in player.hand:
-        d = card_to_dict(c)
-        d["playable"] = c in playable
-        hand.append(d)
+    if player:
+        for c in player.hand:
+            d = card_to_dict(c)
+            d["playable"] = c in playable
+            hand.append(d)
 
-    opponents = []
-    for p in game.players:
-        if p.name != player_name:
-            opponents.append({"name": p.name, "cards": len(p.hand), "is_ai": p.is_ai})
+    # Build circular seating order relative to this player
+    all_players = game.players
+    my_idx = next((i for i, p in enumerate(all_players) if p.name == player_name), 0)
+    seating = []
+    for i in range(len(all_players)):
+        idx = (my_idx + i) % len(all_players)
+        p = all_players[idx]
+        seating.append({
+            "name": p.name,
+            "cards": len(p.hand),
+            "is_ai": p.is_ai,
+            "is_current": p == game.current_player,
+            "is_you": p.name == player_name,
+            "finished": p.name in room.get("finished", [])
+        })
 
     top = game.top_card
     top_dict = card_to_dict(top)
@@ -46,14 +62,15 @@ def get_player_state(room_code, player_name):
     return {
         "hand": hand,
         "top_card": top_dict,
-        "opponents": opponents,
+        "seating": seating,
         "current_player": game.current_player.name,
-        "is_your_turn": game.current_player.name == player_name,
+        "is_your_turn": not eliminated and game.current_player.name == player_name,
         "direction": game.direction,
         "deck_count": len(game.deck.cards),
         "player_name": player_name,
         "game_over": False,
-        "winner": None
+        "winner": None,
+        "finished": room.get("finished", [])
     }
 
 
@@ -70,12 +87,37 @@ def broadcast_state(room_code, messages=None, winner=None):
         socketio.emit("game_state", state, to=p_info["sid"])
 
 
+def check_winner(room_code, player, messages):
+    """When a player empties their hand, they become a watcher.
+    Game ends when only 1 active player remains."""
+    room = rooms[room_code]
+    game = room["game"]
+    room["finished"].append(player.name)
+    rank = len(room["finished"])
+    messages.append(f"🏆 {player.name} finishes #{rank}! Now watching.")
+
+    active_players = [p for p in game.players if p.name not in room["finished"]]
+
+    if len(active_players) <= 1:
+        return room["finished"][0]
+
+    # Advance turn past finished players
+    game.advance_turn()
+    while game.current_player.name in room["finished"]:
+        game.advance_turn()
+    return None
+
+
 def run_ai_turns(room_code):
     room = rooms[room_code]
     game = room["game"]
     messages = []
 
-    while game.current_player.is_ai:
+    # Skip finished players
+    while game.current_player.name in room.get("finished", []):
+        game.advance_turn()
+
+    while game.current_player.is_ai and game.current_player.name not in room.get("finished", []):
         player = game.current_player
         idx = player.ai_choose(game.effective_top)
         if idx is not None:
@@ -113,8 +155,19 @@ def run_ai_turns(room_code):
         if player.has_uno():
             messages.append(f"🎉 {player.name} says UNO!")
         if player.has_won():
-            return messages, player.name
+            winner = check_winner(room_code, player, messages)
+            if winner:
+                return messages, winner
+            # Skip finished players for next iteration
+            while game.current_player.name in room.get("finished", []):
+                game.advance_turn()
+            continue
+
         game.advance_turn()
+        # Skip finished players
+        while game.current_player.name in room.get("finished", []):
+            game.advance_turn()
+
     return messages, None
 
 
@@ -214,6 +267,8 @@ def handle_start(data):
 
     room["game"] = Game(players)
     room["started"] = True
+    room["finished"] = []  # Track players who finished
+    room["total_players"] = len(players)
 
     # Run AI if first turn is bot
     messages, winner = run_ai_turns(code)
@@ -273,7 +328,14 @@ def handle_play(data):
     if player.has_uno():
         messages.append(f"🎉 {player.name} says UNO!")
     if player.has_won():
-        broadcast_state(code, messages, player.name)
+        winner = check_winner(code, player, messages)
+        if winner:
+            broadcast_state(code, messages, winner)
+        else:
+            game.advance_turn()
+            ai_msgs, ai_winner = run_ai_turns(code)
+            messages.extend(ai_msgs)
+            broadcast_state(code, messages, ai_winner)
         return
 
     game.advance_turn()

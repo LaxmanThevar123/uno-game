@@ -33,10 +33,15 @@
         /* GAME BOARD */
         .game-screen { display: none; padding: 15px; max-width: 1000px; margin: 0 auto; }
         .game-screen.active { display: block; }
-        .opponents { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
-        .opponent { background: #16213e; padding: 10px 18px; border-radius: 12px; text-align: center; border: 2px solid #333; }
+        .opponents { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; position: relative; }
+        .opponent { background: #16213e; padding: 10px 18px; border-radius: 12px; text-align: center; border: 2px solid #333; position: relative; }
         .opponent.active-turn { border-color: #4caf50; box-shadow: 0 0 10px #4caf50; }
+        .opponent.finished { opacity: 0.6; border-color: #f8d80e; }
+        .opponent.is-you { border-color: #e94560; }
         .opponent .card-count { font-size: 1.4rem; font-weight: bold; color: #e94560; }
+        .opponent .rank-badge { position: absolute; top: -8px; right: -8px; background: #f8d80e; color: #333; width: 20px; height: 20px; border-radius: 50%; font-size: 0.7rem; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+        .seating-arrow { color: #4caf50; font-size: 1.2rem; display: flex; align-items: center; }
+        .seating-container { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; padding: 10px; background: #0f3460; border-radius: 12px; }
 
         /* TABLE */
         .table { display: flex; justify-content: center; align-items: center; gap: 25px; margin: 20px 0; }
@@ -181,7 +186,7 @@
 
 <!-- GAME SCREEN -->
 <div class="game-screen" id="gameScreen">
-    <div class="opponents" id="opponents"></div>
+    <div class="seating-container" id="seatingContainer"></div>
     <div class="game-info">
         <span id="direction">➡️ Clockwise</span>
         <span id="turnIndicator"></span>
@@ -291,12 +296,27 @@ function getCornerText(type) {
 function renderState(state) {
     isMyTurn = state.is_your_turn;
 
-    // Opponents
-    const oppDiv = document.getElementById('opponents');
-    oppDiv.innerHTML = state.opponents.map(o => {
-        const isActive = o.name === state.current_player;
-        return `<div class="opponent ${isActive ? 'active-turn' : ''}"><div>${o.is_ai ? '🤖' : '👤'} ${o.name}</div><div class="card-count">${o.cards}</div><div style="font-size:0.75rem;">cards</div></div>`;
-    }).join('');
+    // Circular seating
+    const seatDiv = document.getElementById('seatingContainer');
+    const arrow = state.direction === 1 ? '→' : '←';
+    let seatHtml = '';
+    state.seating.forEach((p, i) => {
+        let cls = 'opponent';
+        if (p.is_current) cls += ' active-turn';
+        if (p.finished) cls += ' finished';
+        if (p.is_you) cls += ' is-you';
+        const icon = p.is_you ? '🧑' : (p.is_ai ? '🤖' : '👤');
+        const label = p.is_you ? `${p.name} (You)` : p.name;
+        const status = p.finished ? '👁️ Watching' : `${p.cards} cards`;
+        const rank = state.finished && state.finished.indexOf(p.name) !== -1 ? `<span class="rank-badge">#${state.finished.indexOf(p.name)+1}</span>` : '';
+        seatHtml += `<div class="${cls}">${rank}<div>${icon} ${label}</div><div class="card-count">${p.finished ? '👁️' : p.cards}</div><div style="font-size:0.7rem;">${status}</div></div>`;
+        if (i < state.seating.length - 1) {
+            seatHtml += `<span class="seating-arrow">${arrow}</span>`;
+        }
+    });
+    // Close the circle with arrow back to first
+    seatHtml += `<span class="seating-arrow">${arrow}</span>`;
+    seatDiv.innerHTML = seatHtml;
 
     // Info
     document.getElementById('direction').textContent = state.direction === 1 ? '➡️ Clockwise' : '⬅️ Counter-clockwise';
