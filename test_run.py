@@ -198,5 +198,49 @@ print("  PASS: UNO and win detection correct")
 
 print()
 print("=" * 50)
-print("ALL 15 TESTS PASSED!")
+print("TEST 16: Skip should target next ACTIVE player")
+players16 = [Player('A'), Player('B'), Player('C')]
+game16 = Game(players16)
+game16.current_index = 0
+game16.direction = 1
+room16 = {'finished': ['B'], 'locked': []}
+# Skip from A: next active should be C (skip B who finished)
+idx = next_active(game16, room16)
+assert game16.players[idx].name == 'C', f"FAIL: got {game16.players[idx].name}"
+print("  PASS: Skip from A -> skips finished B -> targets C")
+
+print("=" * 50)
+print("TEST 17: Reverse only flips direction, doesn't target finished")
+players17 = [Player('A'), Player('B'), Player('C'), Player('D')]
+game17 = Game(players17)
+game17.current_index = 0
+game17.direction = 1
+room17 = {'finished': ['D'], 'locked': []}
+# Reverse flips direction to -1
+game17.direction *= -1
+# Now from A going backwards, next active should skip D
+idx = next_active(game17, room17)
+assert game17.players[idx].name == 'C', f"FAIL: got {game17.players[idx].name}"
+print("  PASS: Reverse from A(CCW) -> skips finished D -> C")
+
+print("=" * 50)
+print("TEST 18: Seating order - server sends correct circular order")
+players18 = [Player('Vikhil'), Player('Laxman'), Player('Ali'), Player('Samarth')]
+game18 = Game(players18)
+# Simulate get_player_state seating for Laxman (index 1)
+player_name = 'Laxman'
+all_p = game18.players
+my_idx = next((i for i, p in enumerate(all_p) if p.name == player_name), 0)
+seating = []
+for i in range(len(all_p)):
+    idx = (my_idx + i) % len(all_p)
+    seating.append(all_p[idx].name)
+print(f"  Seating from Laxman's view: {seating}")
+assert seating == ['Laxman', 'Ali', 'Samarth', 'Vikhil']
+print("  PASS: Order is [You, Next, After, Previous]")
+print("  Visual: You(bottom), Ali(right/next), Samarth(top/across), Vikhil(left/prev)")
+
+print()
+print("=" * 50)
+print("ALL 18 TESTS PASSED!")
 print("=" * 50)

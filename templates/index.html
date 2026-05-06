@@ -121,25 +121,19 @@
         .messages { max-width: 600px; margin: 10px auto; padding: 10px; background: #16213e; border-radius: 10px; max-height: 100px; overflow-y: auto; font-size: 0.85rem; }
         .messages p { padding: 2px 0; border-bottom: 1px solid #0f3460; }
 
-        /* CHAT */
-        .chat-toggle { position: fixed; bottom: 20px; right: 20px; width: 50px; height: 50px; border-radius: 50%; background: #533483; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.4); z-index: 50; transition: transform 0.2s; }
-        .chat-toggle:hover { transform: scale(1.1); }
-        .chat-toggle .badge { position: absolute; top: -2px; right: -2px; width: 18px; height: 18px; background: #e94560; border-radius: 50%; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; display: none; }
-        .chat-toggle .badge.show { display: flex; }
-        .chat-box { position: fixed; bottom: 80px; right: 20px; width: 300px; max-height: 400px; background: #16213e; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); z-index: 50; display: none; flex-direction: column; overflow: hidden; }
-        .chat-box.active { display: flex; }
-        .chat-header { padding: 12px 15px; background: #533483; font-weight: bold; font-size: 0.95rem; }
-        .chat-messages { flex: 1; padding: 10px; overflow-y: auto; max-height: 280px; min-height: 150px; }
-        .chat-msg { margin-bottom: 8px; font-size: 0.85rem; }
+        /* CHAT - inline below hand */
+        .chat-inline { max-width: 500px; margin: 15px auto 0; background: #16213e; border-radius: 12px; overflow: hidden; border: 1px solid #333; }
+        .chat-header { padding: 10px 15px; background: #533483; font-weight: bold; font-size: 0.85rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .chat-header .toggle-icon { font-size: 1rem; }
+        .chat-messages { padding: 8px 12px; overflow-y: auto; max-height: 120px; min-height: 60px; }
+        .chat-msg { margin-bottom: 6px; font-size: 0.8rem; }
         .chat-msg .chat-name { font-weight: bold; color: #4caf50; }
         .chat-msg .chat-name.me { color: #e94560; }
-        .chat-msg .chat-text { color: #ddd; margin-top: 2px; }
+        .chat-msg .chat-text { color: #ddd; display: inline; margin-left: 4px; }
         .chat-input-area { display: flex; border-top: 1px solid #0f3460; }
-        .chat-input-area input { flex: 1; padding: 10px 12px; border: none; background: #0f3460; color: #fff; font-size: 0.9rem; outline: none; }
-        .chat-input-area button { padding: 10px 15px; border: none; background: #e94560; color: #fff; cursor: pointer; font-weight: bold; }
-        @media (max-width: 600px) {
-            .chat-box { width: calc(100% - 30px); right: 15px; bottom: 75px; }
-        }
+        .chat-input-area input { flex: 1; padding: 10px 12px; border: none; background: #0f3460; color: #fff; font-size: 0.85rem; outline: none; }
+        .chat-input-area button { padding: 10px 15px; border: none; background: #e94560; color: #fff; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
+        .chat-collapsed .chat-messages, .chat-collapsed .chat-input-area { display: none; }
 
         /* DIRECTION & TURN */
         .game-info { display: flex; justify-content: center; gap: 20px; align-items: center; margin: 10px 0; font-size: 0.9rem; color: #aaa; }
@@ -245,6 +239,14 @@
         <div class="hand-label" id="handLabel">Your Hand</div>
         <div class="hand" id="hand"></div>
     </div>
+    <div class="chat-inline" id="chatInline">
+        <div class="chat-header" onclick="toggleChat()">💬 Chat <span class="toggle-icon" id="chatToggleIcon">▼</span></div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-area">
+            <input type="text" id="chatInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendChat()">
+            <button onclick="sendChat()">Send</button>
+        </div>
+    </div>
 </div>
 
 <!-- COLOR PICKER -->
@@ -258,16 +260,7 @@
     </div>
 </div>
 
-<!-- CHAT -->
-<button class="chat-toggle" id="chatToggle" onclick="toggleChat()" style="display:none;">💬<span class="badge" id="chatBadge">0</span></button>
-<div class="chat-box" id="chatBox">
-    <div class="chat-header">💬 Room Chat</div>
-    <div class="chat-messages" id="chatMessages"></div>
-    <div class="chat-input-area">
-        <input type="text" id="chatInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendChat()">
-        <button onclick="sendChat()">Send</button>
-    </div>
-</div>
+
 
 <!-- WINNER OVERLAY -->
 <div class="overlay" id="winnerOverlay">
@@ -339,20 +332,23 @@ function renderState(state) {
     isMyTurn = state.is_your_turn;
 
     // Seat positions based on player count (you are always bottom)
+    // Clockwise visual: bottom(you) -> right -> top -> left
     const positions = {
         2: ['seat-top', 'seat-bottom'],
-        3: ['seat-top', 'seat-left', 'seat-bottom'],
-        4: ['seat-top', 'seat-left', 'seat-right', 'seat-bottom']
+        3: ['seat-right', 'seat-left', 'seat-bottom'],
+        4: ['seat-top', 'seat-right', 'seat-left', 'seat-bottom']
     };
 
-    // Reorder seating: you at bottom, others distributed
-    const others = state.seating.filter(p => !p.is_you);
-    const me = state.seating.find(p => p.is_you);
+    // Seating from server is already in game order starting from you
+    // seating[0] = you, seating[1] = next in turn, seating[2] = after that...
+    // For 4 players clockwise: you(bottom), next(right), across(top), previous(left)
+    const me = state.seating[0]; // always you
+    const others = state.seating.slice(1);
     let ordered = [];
     const count = state.seating.length;
     if (count === 2) { ordered = [others[0], me]; }
     else if (count === 3) { ordered = [others[0], others[1], me]; }
-    else { ordered = [others[0], others[1], others[2], me]; }
+    else { ordered = [others[1], others[0], others[2], me]; }
 
     const pos = positions[count] || positions[4];
     const seatsDiv = document.getElementById('seats');
@@ -498,16 +494,18 @@ function playAgain() {
 }
 
 // --- CHAT ---
-let chatOpen = false;
-let unreadCount = 0;
+let chatOpen = true;
 
 function toggleChat() {
     chatOpen = !chatOpen;
-    document.getElementById('chatBox').classList.toggle('active', chatOpen);
+    const el = document.getElementById('chatInline');
+    const icon = document.getElementById('chatToggleIcon');
     if (chatOpen) {
-        unreadCount = 0;
-        document.getElementById('chatBadge').classList.remove('show');
-        document.getElementById('chatInput').focus();
+        el.classList.remove('chat-collapsed');
+        icon.textContent = '▼';
+    } else {
+        el.classList.add('chat-collapsed');
+        icon.textContent = '▲';
     }
 }
 
@@ -522,14 +520,8 @@ function sendChat() {
 function addChatMessage(name, message) {
     const div = document.getElementById('chatMessages');
     const isMe = name === myName;
-    div.innerHTML += `<div class="chat-msg"><span class="chat-name ${isMe ? 'me' : ''}">${name}:</span><div class="chat-text">${message}</div></div>`;
+    div.innerHTML += `<div class="chat-msg"><span class="chat-name ${isMe ? 'me' : ''}">${name}:</span><span class="chat-text">${message}</span></div>`;
     div.scrollTop = div.scrollHeight;
-    if (!chatOpen) {
-        unreadCount++;
-        const badge = document.getElementById('chatBadge');
-        badge.textContent = unreadCount;
-        badge.classList.add('show');
-    }
 }
 
 // --- SOCKET EVENTS ---
@@ -539,7 +531,6 @@ socket.on('room_created', (data) => {
     document.getElementById('roomCode').textContent = data.code;
     document.getElementById('hostControls').style.display = 'block';
     document.getElementById('waitingMsg').style.display = 'none';
-    document.getElementById('chatToggle').style.display = 'block';
     renderLobby(data.players);
     showScreen('lobbyScreen');
 });
@@ -547,7 +538,6 @@ socket.on('room_created', (data) => {
 socket.on('room_update', (data) => {
     roomCode = data.code;
     renderLobby(data.players);
-    document.getElementById('chatToggle').style.display = 'block';
     if (!isHost) showScreen('lobbyScreen');
 });
 

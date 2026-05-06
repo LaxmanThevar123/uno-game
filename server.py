@@ -410,16 +410,17 @@ def handle_play(data):
         messages.append(f"{player.name} plays {played.card_type} → {chosen_color}")
     else:
         if played.card_type == "Skip":
-            messages.append(f"{player.name} plays Skip!")
-            game.apply_action(played, None)
+            nxt = next_active_player_index(game, room)
+            messages.append(f"{player.name} plays Skip! {game.players[nxt].name} skipped.")
+            game.advance_turn()  # skip to next
         elif played.card_type == "Draw Two":
             nxt = next_active_player_index(game, room)
             game.players[nxt].add_cards(game.deck.draw_multiple(2))
             messages.append(f"{player.name} plays Draw Two! {game.players[nxt].name} draws 2.")
-            game.advance_turn()  # skip affected player
+            game.advance_turn()
         elif played.card_type == "Reverse":
+            game.direction *= -1
             messages.append(f"{player.name} plays Reverse!")
-            game.apply_action(played, None)
         else:
             messages.append(f"{player.name} plays {played.color} {played.card_type}")
             game.apply_action(played, None)
